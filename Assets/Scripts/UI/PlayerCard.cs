@@ -15,10 +15,12 @@ public class PlayerCard : MonoBehaviour
     public Image frame;            // ornate border art (transparent center)
     public Image emblem;           // rank emblem badge
     public Image nameplate;        // ornate bar behind the name
+    public Image banner;           // bottom banner strip
 
     [Header("Text / State")]
     public TMP_Text nameText;      // player name
     public TMP_Text solvedText;    // "SOLVED: n"
+    public TMP_Text rankText;      // Roman numeral - season level (e.g., "IV-5")
     public Image bombIcon;         // shown while this player holds the bomb
     public GameObject holderHighlight; // glow when active holder
     public GameObject eliminatedOverlay; // dim + "OUT" when eliminated
@@ -50,6 +52,10 @@ public class PlayerCard : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Binds a player to this card along with their cosmetic loadout.
+    /// Uses puzzleTag as the display name.
+    /// </summary>
     public void Bind(Player player, CosmeticLoadout loadout)
     {
         boundPlayer = player;
@@ -57,9 +63,84 @@ public class PlayerCard : MonoBehaviour
 
         if (player != null && nameText != null)
         {
-            nameText.text = player.isLocal ? player.playerName + " (YOU)" : player.playerName;
+            // Use puzzleTag as primary display name, add (YOU) suffix for local player
+            nameText.text = player.isLocal ? player.puzzleTag + " (YOU)" : player.puzzleTag;
             nameText.color = Color.white;
         }
+
+        // Display rank if player has rank data
+        if (rankText != null)
+        {
+            rankText.text = player.playerRank.GetDisplayString();
+            rankText.gameObject.SetActive(true);
+        }
+
+        Refresh();
+    }
+
+    /// <summary>
+    /// Binds player card data for loading screen display.
+    /// </summary>
+    public void Bind(PlayerCardData data)
+    {
+        if (data != null)
+        {
+            if (nameText != null)
+            {
+                nameText.text = data.displayName;
+                nameText.color = Color.white;
+            }
+
+            if (rankText != null)
+            {
+                rankText.text = data.GetRankDisplay();
+                rankText.gameObject.SetActive(true);
+            }
+        }
+
+        // Still need a Player for Refresh purposes
+        var player = new Player(0, data?.puzzleTag ?? "", data?.isLocal ?? false);
+        if (data != null)
+        {
+            player.isBot = data.isBot;
+            player.playerRank = data.rank;
+        }
+        boundPlayer = player;
+        Refresh();
+    }
+
+    /// <summary>
+    /// Binds a player card for loading screen display (lobby view).
+    /// </summary>
+    public void BindForLobby(PlayerCardData data, CosmeticLoadout loadout)
+    {
+        boundPlayer = new Player(0, data?.puzzleTag ?? "", data?.isLocal ?? false);
+        if (data != null)
+        {
+            boundPlayer.playerRank = data.rank;
+            boundPlayer.isBot = data.isBot;
+        }
+
+        ApplyLoadout(loadout);
+
+        if (nameText != null)
+        {
+            nameText.text = data?.displayName ?? "";
+            nameText.color = Color.white;
+        }
+
+        if (rankText != null && data != null && data.rank.level > 0)
+        {
+            rankText.text = data.GetRankDisplay();
+            rankText.gameObject.SetActive(true);
+        }
+
+        // Apply banner if provided
+        if (banner != null && loadout != null)
+        {
+            SetSprite(banner, loadout.banner);
+        }
+
         Refresh();
     }
 
@@ -72,6 +153,7 @@ public class PlayerCard : MonoBehaviour
         SetSprite(frame, lo.frame);
         SetSprite(nameplate, lo.nameplate);
         SetSprite(emblem, lo.emblem);
+        SetSprite(banner, lo.banner);
     }
 
     private void SetSprite(Image img, Sprite sprite)
