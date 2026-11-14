@@ -139,14 +139,16 @@ public class NetManager : MonoBehaviour
         Debug.Log($"[Matchmaking] Searching for real players ({totalSlots} slots, {timeout:0.0}s timeout)...");
 
         // Try Unity Multiplayer Center first (if services are ready)
-        // If MP Center fails or isn't available, fall back to HTTP
+        // If MP Center fails, we still try HTTP fallback below
         if (_unityServicesInitialized && matchmakingClient != null)
         {
             yield return StartCoroutine(FindMatchViaMPCCenter(totalSlots, localSlot, timeout, result, ref online, humans, onComplete));
         }
 
         // HTTP fallback: always available as backup for WebGL or when MP Center fails
-        if (!online && !_unityServicesInitialized)
+        // FIX: Previously this only ran when !_unityServicesInitialized, but when MP Center
+        // fails (e.g., CORS issues in WebGL), online stays false and we need HTTP fallback
+        if (!online)
         {
             yield return StartCoroutine(FindMatchViaHttpFallback(totalSlots, timeout, result, ref online, humans, onComplete));
         }
