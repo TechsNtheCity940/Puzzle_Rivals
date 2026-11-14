@@ -30,52 +30,24 @@ public class LoadingScreen : MonoBehaviour
 
     private List<GameObject> _activeCards = new List<GameObject>();
 
-    // Player info structure for matchmaking results
-    public struct PlayerInfo
-    {
-        public int slot;
-        public bool isHuman;
-        public string puzzleTag;
-        public bool isLocal;
-        
-        public PlayerInfo(int s, bool human, string tag, bool local)
-        {
-            slot = s;
-            isHuman = human;
-            puzzleTag = tag;
-            isLocal = local;
-        }
-    }
-
-    // Matchmaking result struct containing all slot information
-    public struct MatchmakingResult
-    {
-        public List<int> humanSlots;      // Slots occupied by human players
-        public List<int> aiSlots;         // Slots filled by AI bots
-        public List<PlayerInfo> players;  // Full player info for each slot
-        public string roomId;             // Matchmaking room identifier
-        
-        public MatchmakingResult(int totalSlots)
-        {
-            humanSlots = new List<int>();
-            aiSlots = new List<int>();
-            players = new List<PlayerInfo>(new PlayerInfo[totalSlots]);
-            roomId = "";
-        }
-    }
-
     /// <summary>
     /// Creates a 4-player FFA lobby. Searches for 3 other players, fills with bots if not found.
+    /// Uses NetManager's MatchmakingResult for consistency with matchmaking flow.
     /// </summary>
     public MatchmakingResult CreateFFALobby(string localPuzzleTag = null)
     {
         const int totalSlots = 4;
-        var result = new MatchmakingResult(totalSlots);
+        var result = new MatchmakingResult { totalSlots = totalSlots };
         
         // Initialize player info for each slot
+        string localTag = localPuzzleTag ?? "LocalPlayer";
         for (int i = 0; i < totalSlots; i++)
         {
-            result.players[i] = new PlayerInfo(i, false, "", false);
+            bool isHuman = i == 0;  // Local player is slot 0
+            string tag = isHuman ? localTag : "";
+            var playerInfo = new PlayerInfo(i, isHuman, tag, isHuman);
+            result.players.Add(playerInfo);
+            result.playerNames.Add(tag);
         }
 
         // Try to find other players (simulated - in real implementation this would
@@ -90,36 +62,36 @@ public class LoadingScreen : MonoBehaviour
             int additionalPlayers = Random.Range(0, 4);
             
             // Mark which slots have humans vs bots
-            for (int i = 0; i < totalSlots; i++)
+            for (int i = 1; i < totalSlots; i++)  // Start from 1, slot 0 is local
             {
-                bool isLocal = (i == 0);  // Local player is slot 0
-                
-                if (isLocal)
-                {
-                    // Local player
-                    result.players[i] = new PlayerInfo(i, true, localPuzzleTag ?? "LocalPlayer", true);
-                    result.humanSlots.Add(i);
-                    foundPlayers++;
-                }
-                else if (additionalPlayers > 0 && Random.value > 0.5f)
+                if (additionalPlayers > 0 && Random.value > 0.5f)
                 {
                     // Found another human player
                     string tag = $"Player{i + 1}";
                     result.players[i] = new PlayerInfo(i, true, tag, false);
+                    result.playerNames[i] = tag;
                     result.humanSlots.Add(i);
-                    result.aiSlots.Add(i);
+                    result.realPlayers++;
                     foundPlayers++;
                     additionalPlayers--;
                 }
                 else
                 {
                     // Fill with AI bot
-                    string botTag = GenerateBotPuzzleTag();
+                    string botTag = GenerateBotPuzzleTag(i);
                     result.players[i] = new PlayerInfo(i, false, botTag, false);
+                    result.playerNames[i] = botTag;
                     result.aiSlots.Add(i);
                 }
             }
+            
+            // Slot 0 (local player)
+            result.humanSlots.Add(0);
         }
+
+        result.online = false;  // Local lobby is offline
+        result.botCount = totalSlots - foundPlayers - 1;  // -1 for local player
+        result.roomId = "LOCAL_" + Random.Range(1000, 9999);
 
         return result;
     }
@@ -128,7 +100,9 @@ public class LoadingScreen : MonoBehaviour
     /// Generates a randomized puzzle tag for AI bots.
     /// Format examples: "Alpha-Omega-42", "Quantum-Vortex-7", "Neutron-Prime-9"
     /// </summary>
-    public string GenerateBotPuzzleTag()
+    /// <param name="slot">Slot index to generate tag for</param>
+    /// <returns>A randomized puzzle tag string</returns>
+    public string GenerateBotPuzzleTag(int slot)
     {
         string[] prefixes = { 
             "Alpha", "Beta", "Gamma", "Delta", "Epsilon",
@@ -145,8 +119,8 @@ public class LoadingScreen : MonoBehaviour
             "Anomaly", "Pulsar", "Nebula", "Galaxy", "Universe"
         };
 
-        string prefix = prefixes[Random.Range(0, prefixes.Length)];
-        string suffix = suffixes[Random.Range(0, suffixes.Length)];
+        string prefix = prefixes[slot % prefixes.Length];
+        string suffix = suffixes[(slot * 3) % suffixes.Length];
         int number = Random.Range(1, 100);
         
         return $"{prefix}-{suffix}-{number}";
@@ -168,11 +142,12 @@ public class LoadingScreen : MonoBehaviour
             CreatePlayerCard(i, isHuman, isLocal);
         }
 
-        RefreshStatus(humanSlots?.Count ?? 0, aiSlots?.Count ?? 0);
+        RefreshStatus(humanSlots?.Count ?? 0, aiSlots?.Count ?? totalSlots - (humanSlots?.Count ?? 0));
     }
 
     /// <summary>
     /// Creates the loading screen from a matchmaking result.
+    /// Uses NetManager.MatchmakingResult for consistency.
     /// </summary>
     public void ShowFromMatchmakingResult(MatchmakingResult result, int localSlot = 0)
     {
@@ -249,7 +224,7 @@ public class LoadingScreen : MonoBehaviour
         }
         else
         {
-            displayName = "AI Bot";
+            displayName = GenerateBotPuzzleTag(slot);
         }
 
         // Create placeholder player for card binding
@@ -267,7 +242,7 @@ public class LoadingScreen : MonoBehaviour
             var textObj = cardObj.transform.Find("NameText");
             if (textObj != null && textObj.GetComponent<TextMeshProUGUI>() != null)
             {
-                textObj.GetComponent<TextMeshProUGUI>().text = isLocal ? "YOU" : (isHuman ? $"Player {slot + 1}" : "AI Bot");
+                textObj.GetComponent<TextMeshProUGUI>().text = isLocal ? "YOU" : (isHuman ? $"Player {slot + 1}" : displayName);
             }
         }
 
@@ -282,7 +257,9 @@ public class LoadingScreen : MonoBehaviour
     }
 
     /// <summary>
-    /// Creates a player card from player info (used for proper puzzleTag display).
+    /// Creates the loading screen from a matchmaking result.
+    /// Uses player info to display proper puzzleTag names.
+    /// Uses BindForLobby for lobby-style display.
     /// </summary>
     public void CreatePlayerCard(PlayerInfo info)
     {
@@ -295,11 +272,17 @@ public class LoadingScreen : MonoBehaviour
         var player = new Player(info.slot, info.puzzleTag, info.isLocal);
         player.isBot = !info.isHuman;
 
-        // Set card visuals
+        // Create PlayerCardData for lobby-style binding
+        var defaultRank = new PlayerRank(0, 1, 0, 100); // Level 1, no completed seasons
+        var cardData = new PlayerCardData(player, defaultRank, !info.isHuman);
+        cardData.puzzleTag = info.puzzleTag;
+        cardData.displayName = info.isLocal ? info.puzzleTag + " (YOU)" : info.puzzleTag;
+
+        // Set card visuals using BindForLobby
         if (card != null)
         {
-            var loadout = new CosmeticLoadout(); // Uses defaults
-            card.Bind(player, loadout);
+            var defaultLoadout = new CosmeticLoadout(); // Uses defaults
+            card.BindForLobby(cardData, defaultLoadout);
         }
 
         // Position the card
@@ -324,6 +307,32 @@ public class LoadingScreen : MonoBehaviour
         }
 
         _activeCards.Add(cardObj);
+    }
+
+    /// <summary>
+    /// Sets display names for all slots (called after matchmaking completes).
+    /// Used to show puzzleTags from the matchmaking result.
+    /// </summary>
+    public void SetPlayerNames(List<string> playerNames)
+    {
+        ClearCards();
+        int totalSlots = playerNames != null ? playerNames.Count : 0;
+        
+        for (int i = 0; i < totalSlots; i++)
+        {
+            bool isHuman = i == 0; // First slot is always local player (human)
+            CreatePlayerCard(i, isHuman, i == 0, playerNames[i]);
+        }
+    }
+
+    /// <summary>
+    /// Creates a player card with a custom display name (puzzleTag).
+    /// Used for displaying matchmaking results with proper player names.
+    /// Uses BindForLobby for lobby-style display.
+    /// </summary>
+    private void CreatePlayerCard(int slot, bool isHuman, bool isLocal, string displayName)
+    {
+        CreatePlayerCard(new PlayerInfo(slot, isHuman, displayName, isLocal));
     }
 
     private void Awake()

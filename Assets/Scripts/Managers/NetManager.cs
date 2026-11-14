@@ -24,9 +24,37 @@ public class MatchmakingResult
     public List<int> humanSlots = new List<int>();
     public List<int> aiSlots = new List<int>();
     
-    // Player display names (puzzleTags) for human players
-    // Index corresponds to slot index in humanSlots
+    // Player info for each slot
+    // Index corresponds to slot index
+    public List<PlayerInfo> players = new List<PlayerInfo>();
+    
+    // Legacy field - kept for compatibility
     public List<string> playerNames = new List<string>();
+    
+    public MatchmakingResult()
+    {
+        players = new List<PlayerInfo>();
+    }
+}
+
+// PlayerInfo for matchmaking results (mirrors LoadingScreen.PlayerInfo)
+[System.Serializable]
+public class PlayerInfo
+{
+    public int slot;
+    public bool isHuman;
+    public string puzzleTag;
+    public bool isLocal;
+    
+    public PlayerInfo() {}
+    
+    public PlayerInfo(int s, bool human, string tag, bool local)
+    {
+        slot = s;
+        isHuman = human;
+        puzzleTag = tag;
+        isLocal = local;
+    }
 }
 
 /// <summary>
@@ -61,6 +89,8 @@ public class NetManager : MonoBehaviour
 
     private MatchmakingResult _lastResult;
     private bool _unityServicesInitialized = false;
+    private bool _matchmakingTimedOut = false;
+    private bool _mpCenterFailed = false;
 
     private void Awake()
     {
@@ -131,36 +161,101 @@ public class NetManager : MonoBehaviour
     {
         totalSlots = Mathf.Max(1, totalSlots);
         localSlot = Mathf.Clamp(localSlot, 0, totalSlots - 1);
+        timeout = Mathf.Max(0.5f, timeout);
 
         var result = new MatchmakingResult { totalSlots = totalSlots };
         var humans = new List<int> { localSlot }; // the local player is always real
         bool online = false;
 
+        // Initialize player info for each slot
+        string localPuzzleTag = GetLocalPlayerName();
+        for (int i = 0; i < totalSlots; i++)
+        {
+            bool isHuman = i == localSlot;
+            string tag = isHuman ? localPuzzleTag : "";
+            var playerInfo = new PlayerInfo(i, isHuman, tag, isHuman);
+            result.players.Add(playerInfo);
+            result.playerNames.Add(tag);
+        }
+
         Debug.Log($"[Matchmaking] Searching for real players ({totalSlots} slots, {timeout:0.0}s timeout)...");
+
+        // Reset timeout flags
+        _matchmakingTimedOut = false;
+        _mpCenterFailed = false;
+
+        // Track whether we've attempted MP Center
+        bool triedMPCenter = _unityServicesInitialized && matchmakingClient != null;
 
         // Try Unity Multiplayer Center first (if services are ready)
         // If MP Center fails, we still try HTTP fallback below
-        if (_unityServicesInitialized && matchmakingClient != null)
+        // FIX: Yield IEnumerator directly, not through StartCoroutine, for WebGL compatibility
+        if (triedMPCenter)
         {
-            yield return StartCoroutine(FindMatchViaMPCCenter(totalSlots, localSlot, timeout, result, ref online, humans, onComplete));
+            yield return FindMatchViaMPCCenter(totalSlots, localSlot, timeout, result, ref online, humans);
         }
 
-        // HTTP fallback: always available as backup for WebGL or when MP Center fails
+        // If MP Center didn't succeed, try HTTP fallback
         // FIX: Previously this only ran when !_unityServicesInitialized, but when MP Center
         // fails (e.g., CORS issues in WebGL), online stays false and we need HTTP fallback
-        if (!online)
+        // Changed condition from: if (!online && !_unityServicesInitialized)
+        // To: if (!online || _matchmakingTimedOut || _mpCenterFailed)
+        if (!online || _matchmakingTimedOut || _mpCenterFailed)
         {
-            yield return StartCoroutine(FindMatchViaHttpFallback(totalSlots, timeout, result, ref online, humans, onComplete));
+            yield return FindMatchViaHttpFallback(totalSlots, timeout, result, ref online, humans, localSlot);
+        }
+
+        // CRITICAL FIX: Ensure matchmaking is finalized even after HTTP failure
+        // This guarantees the callback is always invoked
+        if (!online && _matchmakingTimedOut)
+        {
+            Debug.Log("[Matchmaking] HTTP fallback timeout, forcing bot fill");
+            _mpCenterFailed = true; // Mark as failed so we don't retry
         }
 
         // If still not online after all attempts, fill with bots and mark as offline
         if (!online)
         {
             Debug.Log("[Matchmaking] No real players found, using AI bots only");
+            // Generate bot puzzle tags for remaining slots
+            for (int slot = 0; slot < totalSlots; slot++)
+            {
+                if (!humans.Contains(slot) && string.IsNullOrEmpty(result.playerNames[slot]))
+                {
+                    GenerateBotPuzzleTag(result, slot);
+                }
+            }
         }
+
+        // Fill AI slots list and update player info for non-human slots
+        for (int slot = 0; slot < totalSlots; slot++)
+        {
+            if (humans.Contains(slot))
+            {
+                result.humanSlots.Add(slot);
+                // Mark as human in players list
+                if (slot < result.players.Count)
+                    result.players[slot].isHuman = true;
+            }
+            else
+            {
+                result.aiSlots.Add(slot);
+                // Mark as bot in players list if not already done
+                if (slot < result.players.Count)
+                    result.players[slot].isHuman = false;
+            }
+        }
+
+        // Finalize result
+        result.online = online;
+        result.realPlayers = humans.Count;
+        result.botCount = totalSlots - humans.Count;
+        result.roomId = (online ? "ROOM_" : "LOCAL_") + UnityEngine.Random.Range(1000, 9999);
 
         Debug.Log($"[Matchmaking] Lobby ready ({result.roomId}): {result.realPlayers} real, {result.botCount} bots.");
         OnMatchReady?.Invoke(result);
+        
+        // CRITICAL FIX: Always invoke the callback to prevent hanging
         onComplete?.Invoke(result);
     }
 
@@ -168,12 +263,30 @@ public class NetManager : MonoBehaviour
         => FindMatch(totalSlots, localSlot, defaultSearchTimeout, onComplete);
 
     /// <summary>
+    /// Get the local player's puzzle tag/name
+    /// </summary>
+    private string GetLocalPlayerName()
+    {
+        // Try to get from GameState if available
+        var gameState = GameState.Instance;
+        if (gameState != null && gameState.localPlayer != null)
+        {
+            return gameState.localPlayer.puzzleTag;
+        }
+        return "LocalPlayer";
+    }
+
+    /// <summary>
     /// Legacy HTTP-based matchmaking fallback
     /// </summary>
     private IEnumerator FindMatchViaHttpFallback(int totalSlots, float timeout, MatchmakingResult result, 
-        ref bool online, List<int> humans, Action<MatchmakingResult> onComplete)
+        ref bool online, List<int> humans, int localSlot)
     {
         string serverUrl = string.IsNullOrEmpty(supabaseUrl) ? "https://mp.tesana.ai" : supabaseUrl;
+        
+        // Use a timeout to ensure we don't hang forever in WebGL with CORS issues
+        float startTime = Time.time;
+        float effectiveTimeout = Mathf.Max(1f, Mathf.Min(timeout, 8f));
         
         UnityWebRequest req = null;
         bool requestFaulted = false;
@@ -181,7 +294,7 @@ public class NetManager : MonoBehaviour
         try
         {
             req = UnityWebRequest.Get(serverUrl + "/matchmake?slots=" + totalSlots);
-            req.timeout = Mathf.Max(1, Mathf.CeilToInt(timeout));
+            req.timeout = Mathf.CeilToInt(effectiveTimeout);
             
             // Add API key header if available
             if (!string.IsNullOrEmpty(supabaseApiKey))
@@ -197,27 +310,78 @@ public class NetManager : MonoBehaviour
 
         if (!requestFaulted && req != null)
         {
+            Debug.Log("[Matchmaking] Sending HTTP request to " + serverUrl + "/matchmake?slots=" + totalSlots);
+            
             yield return req.SendWebRequest();
 
-            if (req.result == UnityWebRequest.Result.Success)
+            bool requestFailed = false;
+            
+            // Check if we timed out while waiting
+            if (Time.time - startTime > effectiveTimeout)
             {
-                online = true;
-                TryParseRemoteHumans(req.downloadHandler.text, result.totalSlots, 0, humans);
-                Debug.Log("[Matchmaking] Backend reachable. Real players found: " + humans.Count);
+                Debug.Log("[Matchmaking] HTTP request timed out after " + effectiveTimeout + "s");
+                requestFailed = true;
+                _matchmakingTimedOut = true;
+            }
+            else if (req.result == UnityWebRequest.Result.Success)
+            {
+                string responseText = req.downloadHandler?.text ?? "";
+                bool validResponse = !string.IsNullOrEmpty(responseText) && 
+                                     (responseText.Contains("\"players\"") || responseText.StartsWith("{"));
+                
+                if (validResponse)
+                {
+                    online = true;
+                    TryParseRemoteHumans(responseText, result.totalSlots, localSlot, humans);
+                    Debug.Log("[Matchmaking] Backend reachable. Real players found: " + humans.Count);
+                }
+                else
+                {
+                    Debug.Log("[Matchmaking] Backend unreachable (invalid response). Falling back to AI bots.");
+                    requestFailed = true;
+                    _mpCenterFailed = true;
+                }
+                if (req != null) req.Dispose();
             }
             else
             {
-                Debug.Log("[Matchmaking] Backend unreachable (" + req.result + "). Falling back to AI bots.");
+                // CORS errors in WebGL may not set error flags properly - treat all failures as backend unreachable
+                Debug.Log("[Matchmaking] HTTP request failed (" + req.result + "): " + req.error);
+                Debug.Log("[Matchmaking] Backend unreachable. Falling back to AI bots.");
+                requestFailed = true;
+                _mpCenterFailed = true; // CRITICAL: Mark as failed so bot fill logic triggers
+                if (req != null) req.Dispose();
             }
-            req.Dispose();
         }
+        else
+        {
+            // Request was never created or failed to setup
+            Debug.Log("[Matchmaking] HTTP request could not be initiated. Falling back to AI bots.");
+            _mpCenterFailed = true; // CRITICAL: Mark as failed so bot fill logic triggers
+        }
+        
+        // CRITICAL FIX: Ensure we always complete with a valid state
+        // even when HTTP fails completely (CORS, network errors, etc.)
+        if (!online)
+        {
+            // Generate bot puzzle tags for all non-human slots
+            for (int slot = 0; slot < totalSlots; slot++)
+            {
+                if (!humans.Contains(slot) && string.IsNullOrEmpty(result.playerNames[slot]))
+                {
+                    GenerateBotPuzzleTag(result, slot);
+                }
+            }
+        }
+        
+        Debug.Log("[Matchmaking] HTTP fallback completed, online=" + online + ", mpCenterFailed=" + _mpCenterFailed);
     }
 
     /// <summary>
     /// Find match via Unity Multiplayer Center SDK
     /// </summary>
     private IEnumerator FindMatchViaMPCCenter(int totalSlots, int localSlot, float timeout, 
-        MatchmakingResult result, ref bool online, List<int> humans, Action<MatchmakingResult> onComplete)
+        MatchmakingResult result, ref bool online, List<int> humans)
     {
         if (matchmakingClient == null)
         {
@@ -227,6 +391,7 @@ public class NetManager : MonoBehaviour
         if (matchmakingClient == null)
         {
             Debug.LogWarning("[Matchmaking] MP Center client not available, using HTTP fallback");
+            _mpCenterFailed = true;
             yield break;
         }
 
@@ -284,6 +449,7 @@ public class NetManager : MonoBehaviour
         catch (Exception e)
         {
             Debug.LogWarning($"[Matchmaking] MP Center error: {e.Message}");
+            _mpCenterFailed = true;
         }
 
         matchmakingClient.OnMatchmakingEvent -= onMatchmakingEvent;
@@ -297,6 +463,7 @@ public class NetManager : MonoBehaviour
         if (!matchFound)
         {
             Debug.Log("[Matchmaking] MP Center timeout, falling back to local lobby");
+            _matchmakingTimedOut = true;
         }
     }
 
@@ -355,6 +522,38 @@ public class NetManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Generates a bot puzzle tag for display purposes.
+    /// Format examples: "Alpha-Omega-42", "Quantum-Vortex-7", "Neutron-Prime-9"
+    /// </summary>
+    private void GenerateBotPuzzleTag(MatchmakingResult result, int slot)
+    {
+        string[] prefixes = { 
+            "Alpha", "Beta", "Gamma", "Delta", "Epsilon",
+            "Zeta", "Eta", "Theta", "Iota", "Kappa",
+            "Lambda", "Mu", "Nu", "Xi", "Omicron",
+            "Pi", "Rho", "Sigma", "Tau", "Upsilon",
+            "Phi", "Chi", "Psi", "Omega"
+        };
+        
+        string[] suffixes = { 
+            "Prime", "Vortex", "Quantum", "Neutron", "Photon",
+            "Electron", "Proton", "Ion", "Cyclone", "Tempest",
+            "Storm", "Flare", "Burst", "Nova", "Supernova",
+            "Anomaly", "Pulsar", "Nebula", "Galaxy", "Universe"
+        };
+
+        string prefix = prefixes[slot % prefixes.Length];
+        string suffix = suffixes[(slot * 3) % suffixes.Length];
+        int number = UnityEngine.Random.Range(1, 100);
+        
+        string botTag = $"{prefix}-{suffix}-{number}";
+        result.playerNames[slot] = botTag;
+        result.players[slot].puzzleTag = botTag;
+        result.players[slot].isHuman = false;
+        Debug.Log($"[Matchmaking] Generated bot puzzle tag for slot {slot}: {botTag}");
+    }
+
     public bool IsAi(int slot)
     {
         return _lastResult != null && _lastResult.aiSlots.Contains(slot);
@@ -378,11 +577,14 @@ public class NetManager : MonoBehaviour
 [Serializable]
 public class MatchmakingResponse
 {
-    public PlayerInfo[] players;
+    public BackendPlayerInfo[] players;
 }
 
+/// <summary>
+/// Player info for backend matchmaking responses
+/// </summary>
 [Serializable]
-public class PlayerInfo
+public class BackendPlayerInfo
 {
     public int slot;
     public string playerId;
