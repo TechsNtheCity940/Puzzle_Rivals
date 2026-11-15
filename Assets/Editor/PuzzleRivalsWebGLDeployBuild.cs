@@ -9,7 +9,8 @@ public static class PuzzleRivalsWebGLDeployBuild
 {
     public static void Build()
     {
-        string output = @"E:\PuzzleRivals\WebGL-Deploy-Staging";
+        // Use relative path for CI/CD compatibility (Linux runners cannot access Windows paths)
+        string output = Path.Combine(Application.dataPath, "..", "WebGL-Deploy-Staging");
         Directory.CreateDirectory(output);
         var scenes = EditorBuildSettings.scenes
             .Where(s => s.enabled && File.Exists(s.path))
@@ -19,6 +20,10 @@ public static class PuzzleRivalsWebGLDeployBuild
         if (scenes.Length == 0)
             throw new Exception("No enabled scenes found in EditorBuildSettings.");
 
+        // Set compression to None for GitHub Pages compatibility
+        PlayerSettings.WebGL.compressionFormat = CompressionFormat.None;
+        PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.FullLogger;
+        
         Debug.Log("PR_WEBGL_BUILD_START scenes=" + scenes.Length + " output=" + output);
         Debug.Log("PR_WEBGL_BUILD_UNITY=" + Application.unityVersion);
         Debug.Log("PR_WEBGL_BUILD_COMPRESSION=" + PlayerSettings.WebGL.compressionFormat);
