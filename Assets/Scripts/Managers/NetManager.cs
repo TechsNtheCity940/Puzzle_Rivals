@@ -2,11 +2,10 @@ using UnityEngine;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using Unity.Netcode;
-using Unity.Netcode.Transports.Udp;
-using Unity.Services.Multiplayer.Center;
+using UnityEditor;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
+using UnityEngine.Networking;
 
 /// <summary>
 /// Matchmaking result containing lobby information.
@@ -72,10 +71,6 @@ public class NetManager : MonoBehaviour
     public string supabaseUrl = "";
     [Tooltip("Supabase API key from environment variable (VITE_SUPABASE_PUBLISHABLE_KEY)")]
     public string supabaseApiKey = "";
-
-    [Header("Multiplayer Center")]
-    public string sessionId = "";
-    public Unity.Multiplayer.Center.MatchmakingClient matchmakingClient;
 
     [Header("Matchmaking Settings")]
     public float defaultSearchTimeout = 6f;
@@ -205,22 +200,10 @@ public class NetManager : MonoBehaviour
             _matchmakingTimedOut = false;
             _mpCenterFailed = false;
 
-            // Track whether we've attempted MP Center
-            bool triedMPCenter = _unityServicesInitialized && matchmakingClient != null;
-
-            // Try Unity Multiplayer Center first (if services are ready)
-            // If MP Center fails, we still try HTTP fallback below
-            if (triedMPCenter)
-            {
-                yield return FindMatchViaMPCCenter(totalSlots, localSlot, timeout, result, ref online, humans);
-            }
-
-            // If MP Center didn't succeed, try HTTP fallback
-            if (!online || _matchmakingTimedOut || _mpCenterFailed)
-            {
-                yield return FindMatchViaHttpFallback(totalSlots, timeout, result, ref online, humans, localSlot);
-            }
-
+            // Use HTTP fallback with timeout - skip MP Center since packages may not be available
+            Debug.Log("[Matchmaking] Attempting HTTP fallback matchmaking...");
+            yield return FindMatchViaHttpFallback(totalSlots, timeout, result, ref online, humans, localSlot);
+            
             // CRITICAL FIX: Ensure matchmaking is finalized even after HTTP failure
             if (!online && _matchmakingTimedOut)
             {
@@ -280,16 +263,16 @@ public class NetManager : MonoBehaviour
     /// </summary>
     private string GetLocalPlayerName()
     {
-        var gameState = GameState.Instance;
-        if (gameState != null && gameState.localPlayer != null)
+        var profile = PlayerProfile.Instance?.data;
+        if (profile != null)
         {
-            return gameState.localPlayer.puzzleTag;
+            return string.IsNullOrEmpty(profile.username) ? "RIVAL" : profile.username;
         }
-        return "LocalPlayer";
+        return "RIVAL";
     }
 
     /// <summary>
-    /// Legacy HTTP-based matchmaking fallback
+    /// Legacy HTTP-based matchmaking fallback with timeout
     /// </summary>
     private IEnumerator FindMatchViaHttpFallback(int totalSlots, float timeout, MatchmakingResult result, 
         ref bool online, List<int> humans, int localSlot)
@@ -382,146 +365,6 @@ public class NetManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Find match via Unity Multiplayer Center SDK
-    /// </summary>
-    private IEnumerator FindMatchViaMPCCenter(int totalSlots, int localSlot, float timeout, 
-        MatchmakingResult result, ref bool online, List<int> humans)
-    {
-        if (matchmakingClient == null)
-        {
-            SetupMPCClient();
-        }
-
-        if (matchmakingClient == null)
-        {
-            Debug.LogWarning("[Matchmaking] MP Center client not available, using HTTP fallback");
-            _mpCenterFailed = true;
-            yield break;
-        }
-
-        var startTime = Time.time;
-        bool matchFound = false;
-
-        Action<MatchmakingEvent> onMatchmakingEvent = (evt) =>
-        {
-            switch (evt.Type)
-            {
-                case MatchmakingEventType.OnLobbyInitialJoined:
-                    Debug.Log("[MP Center] Lobby joined successfully");
-                    online = true;
-                    matchFound = true;
-                    break;
-                    
-                case MatchmakingEventType.OnPlayerJoined:
-                    Debug.Log($"[MP Center] Player {evt.SlotIndex} joined lobby");
-                    if (evt.SlotIndex != localSlot)
-                        humans.Add(evt.SlotIndex);
-                    break;
-                    
-                case MatchmakingEventType.OnPlayerLeft:
-                    Debug.Log($"[MP Center] Player {evt.SlotIndex} left lobby");
-                    humans.Remove(evt.SlotIndex);
-                    break;
-                    
-                case MatchmakingEventType.OnLobbyClosed:
-                    Debug.Log("[MP Center] Lobby closed");
-                    matchFound = true;
-                    break;
-            }
-        };
-
-        try
-        {
-            matchmakingClient.OnMatchmakingEvent += onMatchmakingEvent;
-            
-            var createLobbyRequest = new CreateLobbyRequest()
-            {
-                Id = sessionId,
-                MaxPlayers = totalSlots,
-                Version = "1.0.0"
-            };
-            
-            createLobbyRequest.Options = new CreateLobbyOptions()
-            {
-                Flags = LobbyFlags.MinPublic
-            };
-
-            yield return matchmakingClient.CreateLobbyAsync(createLobbyRequest);
-        }
-        catch (Exception e)
-        {
-            Debug.LogWarning($"[Matchmaking] MP Center error: {e.Message}");
-            _mpCenterFailed = true;
-        }
-
-        matchmakingClient.OnMatchmakingEvent -= onMatchmakingEvent;
-
-        while (!matchFound && (Time.time - startTime) < timeout)
-        {
-            yield return null;
-        }
-
-        if (!matchFound)
-        {
-            Debug.Log("[Matchmaking] MP Center timeout, falling back to local lobby");
-            _matchmakingTimedOut = true;
-        }
-    }
-
-    private void SetupMPCClient()
-    {
-        if (UnityServices.State != ServicesInitializationState.Initialized)
-        {
-            Debug.LogWarning("[MP Center] Unity Services not initialized");
-            return;
-        }
-
-        try
-        {
-            matchmakingClient = new MatchmakingClient();
-            matchmakingClient.OnMatchmakingEvent += OnMatchmakingEvent;
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[MP Center] Failed to create client: {e.Message}");
-            matchmakingClient = null;
-        }
-    }
-
-    private void OnMatchmakingEvent(MatchmakingEvent evt)
-    {
-        // Event handling placeholder
-    }
-
-    /// <summary>
-    /// Integration point for a real backend response. Expected to append remote
-    /// human slot indices (other than localSlot) to `humans`. 
-    /// </summary>
-    private void TryParseRemoteHumans(string responseBody, int totalSlots, int localSlot, List<int> humans)
-    {
-        if (string.IsNullOrEmpty(responseBody)) return;
-        
-        try
-        {
-            var json = JsonUtility.FromJson<MatchmakingResponse>(responseBody);
-            if (json?.players != null)
-            {
-                foreach (var player in json.players)
-                {
-                    if (player.slot >= 0 && player.slot < totalSlots && player.slot != localSlot && !humans.Contains(player.slot))
-                    {
-                        humans.Add(player.slot);
-                    }
-                }
-            }
-        }
-        catch (Exception e)
-        {
-            Debug.LogWarning($"[Matchmaking] Failed to parse response: {e.Message}");
-        }
-    }
-
-    /// <summary>
     /// Generates a bot puzzle tag for display purposes.
     /// Format examples: "Alpha-Omega-42", "Quantum-Vortex-7", "Neutron-Prime-9"
     /// </summary>
@@ -559,14 +402,39 @@ public class NetManager : MonoBehaviour
     }
 
     /// <summary>
+    /// Integration point for a real backend response. Expected to append remote
+    /// human slot indices (other than localSlot) to `humans`. 
+    /// </summary>
+    private void TryParseRemoteHumans(string responseBody, int totalSlots, int localSlot, List<int> humans)
+    {
+        if (string.IsNullOrEmpty(responseBody)) return;
+        
+        try
+        {
+            var json = JsonUtility.FromJson<MatchmakingResponse>(responseBody);
+            if (json?.players != null)
+            {
+                foreach (var player in json.players)
+                {
+                    if (player.slot >= 0 && player.slot < totalSlots && player.slot != localSlot && !humans.Contains(player.slot))
+                    {
+                        humans.Add(player.slot);
+                    }
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[Matchmaking] Failed to parse response: {e.Message}");
+        }
+    }
+
+    /// <summary>
     /// Clean up resources on destroy
     /// </summary>
     private void OnDestroy()
     {
-        if (matchmakingClient != null)
-        {
-            matchmakingClient.OnMatchmakingEvent -= OnMatchmakingEvent;
-        }
+        // No event handlers to clean up in simplified version
     }
 }
 
