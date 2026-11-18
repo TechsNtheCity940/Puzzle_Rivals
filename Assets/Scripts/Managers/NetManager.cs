@@ -77,8 +77,8 @@ public class NetManager : MonoBehaviour
     public int maxRetryAttempts = 3;
     
     [Header("Quick Match Settings")]
-    [Tooltip("When true, skip live player search and fill lobb with bots immediately (for debugging/testing)")]
-    public bool quickMatchNoLivePlayers = true;
+    [Tooltip("When true, skip live player search and fill lobby with bots immediately (for debugging/testing)")]
+    public bool quickMatchNoLivePlayers = false;
 
     [Header("State")]
     public bool isConnected = false;
