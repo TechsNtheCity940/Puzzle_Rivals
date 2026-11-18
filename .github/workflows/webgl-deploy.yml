@@ -55,7 +55,7 @@ jobs:
           name: webgl-build
           path: build
 
-  deploy:
+  deploy-to-puzzle-rivals:
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -72,6 +72,7 @@ jobs:
           name: webgl-build
           path: build
 
+      # Deploy to GitHub Pages from Puzzle_Rivals repo
       - name: Setup Pages
         id: deploy
         uses: actions/configure-pages@v4
@@ -83,3 +84,39 @@ jobs:
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
+
+  deploy-to-puzzlerivals-website:
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ secrets.DEPLOY_TOKEN != '' }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: webgl-build
+          path: build
+
+      - name: Checkout puzzlerivals-website repo
+        uses: actions/checkout@v4
+        with:
+          repository: TechsNtheCity940/puzzlerivals-website
+          token: ${{ secrets.DEPLOY_TOKEN }}
+          persist-credentials: false
+          path: website
+
+      - name: Copy build files to website repo
+        run: |
+          rm -rf website/*
+          cp -r build/* website/
+
+      - name: Commit and push to puzzlerivals-website
+        run: |
+          cd website
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add -A
+          git diff --quiet || git commit -m "Deploy WebGL build from Puzzle_Rivals (auto)"
+          git push origin main
