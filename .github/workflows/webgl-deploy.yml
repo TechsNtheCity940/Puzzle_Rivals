@@ -106,10 +106,28 @@ jobs:
           persist-credentials: false
           path: website
 
-      - name: Copy build files to website repo
+      - name: Deploy WebGL build to game directory
         run: |
-          rm -rf website/*
-          cp -r build/* website/
+          # Preserve CNAME and README.md
+          cp website/CNAME website/CNAME.bak 2>/dev/null || true
+          
+          # Remove only the game build directory, not the root files
+          rm -rf website/game/
+          
+          # Copy new build to game directory
+          mkdir -p website/game/
+          cp -r build/* website/game/
+          
+          # Restore CNAME if it existed
+          if [ -f website/CNAME.bak ]; then
+            cp website/CNAME.bak website/CNAME
+            rm website/CNAME.bak
+          fi
+
+      - name: Update build version file
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > website/game/BUILD_VERSION.txt
+          echo "Deployed from Puzzle_Rivals commit ${{ github.sha }}" >> website/game/BUILD_VERSION.txt
 
       - name: Commit and push to puzzlerivals-website
         run: |
