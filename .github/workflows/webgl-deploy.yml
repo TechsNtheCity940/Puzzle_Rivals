@@ -73,47 +73,89 @@ jobs:
           # Preserve CNAME (domain configuration)
           cp website/CNAME website/CNAME.bak 2>/dev/null || true
           
-          # Preserve style.css (used by game)
-          cp website/style.css website/style.css.bak 2>/dev/null || true
-          
           # Preserve favicon.ico
           cp website/favicon.ico website/favicon.ico.bak 2>/dev/null || true
           
           # Preserve README.md
           cp website/README.md website/README.md.bak 2>/dev/null || true
 
-      - name: Deploy WebGL build to root (replacing landing page)
+      - name: Deploy WebGL build to game directory
         run: |
-          # Remove landing page and game directory
-          rm -f website/index.html
+          # Remove existing game build directory
           rm -rf website/game/
           
-          # Copy Unity WebGL build to root
-          cp -r build/* website/
+          # Copy Unity WebGL build to game directory
+          mkdir -p website/game/
+          cp -r build/* website/game/
 
-      - name: Restore preserved files
+      - name: Update root index.html to redirect to game
         run: |
-          if [ -f website/CNAME.bak ]; then
-            cp website/CNAME.bak website/CNAME
-            rm website/CNAME.bak
-          fi
-          if [ -f website/style.css.bak ]; then
-            cp website/style.css.bak website/style.css
-            rm website/style.css.bak
-          fi
-          if [ -f website/favicon.ico.bak ]; then
-            cp website/favicon.ico.bak website/favicon.ico
-            rm website/favicon.ico.bak
-          fi
-          if [ -f website/README.md.bak ]; then
-            cp website/README.md.bak website/README.md
-            rm website/README.md.bak
-          fi
+          cat > website/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Puzzle Rivals</title>
+            <meta http-equiv="refresh" content="0; url=./game/">
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                margin: 0;
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                color: #fff;
+                text-align: center;
+              }
+              .container {
+                padding: 2rem;
+              }
+              h1 {
+                font-size: 2.5rem;
+                margin-bottom: 1rem;
+                color: #e94560;
+              }
+              p {
+                font-size: 1.2rem;
+                opacity: 0.8;
+              }
+              .loading {
+                margin-top: 2rem;
+                animation: pulse 1.5s ease-in-out infinite;
+              }
+              @keyframes pulse {
+                0%, 100% { opacity: 0.5; }
+                50% { opacity: 1; }
+              }
+              a {
+                color: #e94560;
+                text-decoration: none;
+              }
+              a:hover {
+                text-decoration: underline;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>Launching Puzzle Rivals...</h1>
+              <p>Redirecting to the game...</p>
+              <div class="loading">Loading...</div>
+              <noscript>
+                <p><a href="./game/">Click here if not redirected</a></p>
+              </noscript>
+            </div>
+          </body>
+          </html>
+          EOF
 
       - name: Update build version file
         run: |
-          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > website/BUILD_VERSION.txt
-          echo "Deployed from Puzzle_Rivals commit ${{ github.sha }}" >> website/BUILD_VERSION.txt
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > website/game/BUILD_VERSION.txt
+          echo "Deployed from Puzzle_Rivals commit ${{ github.sha }}" >> website/game/BUILD_VERSION.txt
 
       - name: Commit and push to puzzlerivals-website
         run: |
