@@ -68,28 +68,52 @@ jobs:
           persist-credentials: false
           path: website
 
-      - name: Deploy WebGL build to game directory
+      - name: Preserve important files
         run: |
-          # Preserve CNAME and README.md
+          # Preserve CNAME (domain configuration)
           cp website/CNAME website/CNAME.bak 2>/dev/null || true
           
-          # Remove only the game build directory, not the root files
+          # Preserve style.css (used by game)
+          cp website/style.css website/style.css.bak 2>/dev/null || true
+          
+          # Preserve favicon.ico
+          cp website/favicon.ico website/favicon.ico.bak 2>/dev/null || true
+          
+          # Preserve README.md
+          cp website/README.md website/README.md.bak 2>/dev/null || true
+
+      - name: Deploy WebGL build to root (replacing landing page)
+        run: |
+          # Remove landing page and game directory
+          rm -f website/index.html
           rm -rf website/game/
           
-          # Copy new build to game directory
-          mkdir -p website/game/
-          cp -r build/* website/game/
-          
-          # Restore CNAME if it existed
+          # Copy Unity WebGL build to root
+          cp -r build/* website/
+
+      - name: Restore preserved files
+        run: |
           if [ -f website/CNAME.bak ]; then
             cp website/CNAME.bak website/CNAME
             rm website/CNAME.bak
           fi
+          if [ -f website/style.css.bak ]; then
+            cp website/style.css.bak website/style.css
+            rm website/style.css.bak
+          fi
+          if [ -f website/favicon.ico.bak ]; then
+            cp website/favicon.ico.bak website/favicon.ico
+            rm website/favicon.ico.bak
+          fi
+          if [ -f website/README.md.bak ]; then
+            cp website/README.md.bak website/README.md
+            rm website/README.md.bak
+          fi
 
       - name: Update build version file
         run: |
-          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > website/game/BUILD_VERSION.txt
-          echo "Deployed from Puzzle_Rivals commit ${{ github.sha }}" >> website/game/BUILD_VERSION.txt
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > website/BUILD_VERSION.txt
+          echo "Deployed from Puzzle_Rivals commit ${{ github.sha }}" >> website/BUILD_VERSION.txt
 
       - name: Commit and push to puzzlerivals-website
         run: |
