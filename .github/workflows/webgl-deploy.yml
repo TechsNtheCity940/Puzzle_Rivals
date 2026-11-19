@@ -36,7 +36,6 @@ jobs:
           targetPlatform: WebGL
           customParameters: -executeMethod PuzzleRivalsWebGLDeployBuild.Build -quit -batchmode -nographics
           buildName: PuzzleRivals
-          outputPath: build
           stagingPath: WebGL-Deploy-Staging
           compressionMethod: None
 
@@ -44,7 +43,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: webgl-build
-          path: build
+          path: WebGL-Deploy-Staging
 
   deploy-to-puzzlerivals-website:
     runs-on: ubuntu-latest
