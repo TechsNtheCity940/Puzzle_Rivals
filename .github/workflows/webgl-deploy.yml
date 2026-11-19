@@ -1,5 +1,4 @@
-# (copy from github)
-name: Unity WebGL Build and Deploy to puzzlerivals-website
+# Unity WebGL Build and Deploy to puzzlerivals-website
 
 on:
   push:
@@ -60,12 +59,17 @@ jobs:
           name: webgl-build
           path: build
 
-      # Use DEPLOY_TOKEN if available, fall back to GITHUB_TOKEN
+      # Use DEPLOY_SSH_KEY secret for authentication
+      - name: Setup SSH authentication
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          ssh-passphrase: ${{ secrets.SSH_PASSPHRASE }}
+
       - name: Checkout puzzlerivals-website repo
         uses: actions/checkout@v4
         with:
           repository: TechsNtheCity940/puzzlerivals-website
-          token: ${{ secrets.DEPLOY_TOKEN || github.token }}
           path: website
 
       - name: Preserve important files
