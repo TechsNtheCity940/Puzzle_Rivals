@@ -63,7 +63,6 @@ jobs:
         uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-          ssh-passphrase: ${{ secrets.SSH_PASSPHRASE }}
 
       - name: Checkout puzzlerivals-website repo
         uses: actions/checkout@v4
