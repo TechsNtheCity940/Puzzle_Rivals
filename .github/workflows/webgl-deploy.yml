@@ -38,9 +38,9 @@ jobs:
           buildName: PuzzleRivals
           stagingPath: WebGL-Deploy-Staging
           compressionMethod: None
-          # Unity license configuration
-          unitySerial: ${{ secrets.UNITY_SERIAL }}
-          unityEmail: ${{ secrets.UNITY_EMAIL }}
+          # Unity Personal license activation (no serial required)
+          # The unity-builder action handles license activation automatically
+          # For Pro/Plus licenses, add unitySerial and unityEmail secrets
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
