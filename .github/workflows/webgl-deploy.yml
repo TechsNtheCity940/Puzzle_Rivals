@@ -33,13 +33,14 @@ jobs:
         uses: game-ci/unity-builder@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           targetPlatform: WebGL
           unityVersion: 2022.3.21f1
           buildMethod: PuzzleRivalsWebGLDeployBuild.Build
           buildName: PuzzleRivals
-          cacheKey: ${{ runner.os }}-${{ env.UNITY_LICENSE }}-${{ github.sha }}-${{ github.ref }}
+          cacheKey: ${{ runner.os }}-${{ github.sha }}-${{ github.ref }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
