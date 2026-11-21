@@ -40,6 +40,7 @@ jobs:
           unityVersion: 2022.3.21f1
           buildMethod: PuzzleRivalsWebGLDeployBuild.Build
           buildName: PuzzleRivals
+          buildsPath: WebGL-Deploy-Staging
           cacheKey: ${{ runner.os }}-${{ github.sha }}-${{ github.ref }}
 
       - name: Upload artifact
@@ -59,7 +60,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: webgl-build
-          path: build
+          path: WebGL-Deploy-Staging
 
       # Use DEPLOY_SSH_KEY secret for authentication
       - name: Setup SSH authentication
@@ -91,7 +92,7 @@ jobs:
           
           # Copy Unity WebGL build to game directory
           mkdir -p website/game/
-          cp -r build/* website/game/
+          cp -r WebGL-Deploy-Staging/* website/game/
 
       - name: Update root index.html to redirect to game
         run: |
