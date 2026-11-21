@@ -31,12 +31,15 @@ jobs:
 
       - name: Setup Unity
         uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
         with:
           targetPlatform: WebGL
           unityVersion: 2022.3.21f1
           buildMethod: PuzzleRivalsWebGLDeployBuild.Build
           buildName: PuzzleRivals
-          unityLicense: ${{ secrets.UNITY_LICENSE }}
+          cacheKey: ${{ runner.os }}-${{ env.UNITY_LICENSE }}-${{ github.sha }}-${{ github.ref }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
