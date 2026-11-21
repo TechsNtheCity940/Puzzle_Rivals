@@ -31,16 +31,15 @@ jobs:
 
       - name: Setup Unity
         uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
-          unityVersion: 2022.3.21f1 LTS
           targetPlatform: WebGL
-          customParameters: -executeMethod PuzzleRivalsWebGLDeployBuild.Build -quit -batchmode -nographics
+          unityVersion: 2022.3.21f1 LTS
+          buildMethod: PuzzleRivalsWebGLDeployBuild.Build
           buildName: PuzzleRivals
-          stagingPath: WebGL-Deploy-Staging
-          compressionMethod: None
-          # Unity Personal license activation (no serial required)
-          # The unity-builder action handles license activation automatically
-          # For Pro/Plus licenses, add unitySerial and unityEmail secrets
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
