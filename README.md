@@ -78,7 +78,7 @@ PuzzleRivals → Setup Verified Animation Sheets
 ## Multiplayer Integration
 
 The game uses a hybrid multiplayer approach:
-- **Unity Multiplayer Center SDK** (`com.unity.multiplayer.center: 1.0.1`) for real-time multiplayer
+- **Unity Multiplayer Center SDK** (`com.unity.multiplayer.center: 1.0.0-pre.3`) for real-time multiplayer
 - **Supabase backend** for matchmaking and player data
 
 ### Configuration
