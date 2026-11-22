@@ -42,6 +42,7 @@ jobs:
           buildName: PuzzleRivals
           buildsPath: WebGL-Deploy-Staging
           cacheKey: ${{ runner.os }}-${{ github.sha }}-${{ github.ref }}
+          collectUnityLogs: true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
