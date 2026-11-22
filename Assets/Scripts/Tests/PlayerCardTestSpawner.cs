@@ -22,8 +22,8 @@ public class PlayerCardTestSpawner : MonoBehaviour
     
     public void CreateTestCard()
     {
-        // Clear existing test cards
-        var existing = FindObjectsByType<PlayerCard>(FindObjectsInactive.None);
+        // Clear existing test cards (exclude inactive objects)
+        var existing = FindObjectsByType<PlayerCard>(FindObjectsInactive.Exclude);
         foreach (var card in existing)
         {
             if (card.name.Contains("TestCard"))
