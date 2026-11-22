@@ -34,68 +34,74 @@ public class MatchBootstrap : MonoBehaviour
     // Every match first searches for real players via NetManager, then fills any
     // unfilled lobby slots with AI bots before booting the mode.
     private IEnumerator Start()
-    {
-        EnsureCanvas();
-        EnsureNetManager();
-
-        GameState.Mode mode = GameState.Instance != null ? GameState.Instance.currentMode : GameState.Mode.FFA;
-        if (mode == GameState.Mode.NONE) mode = GameState.Mode.FFA;
-        bool isBvb = mode == GameState.Mode.BVB;
-
-        int totalSlots = isBvb ? 2 : 4;
-        int localSlot = GameState.Instance != null ? GameState.Instance.localPlayerIndex : 0;
-        localSlot = Mathf.Clamp(localSlot, 0, totalSlots - 1);
-
-        // Hide gameplay HUDs during the search.
-        if (ffaHudRoot != null) ffaHudRoot.SetActive(false);
-        if (bvbHudRoot != null) bvbHudRoot.SetActive(false);
-
-        // Build loading screen with player cards
-        var loadingScreenGO = new GameObject("LoadingScreen", typeof(RectTransform));
-        loadingScreenGO.transform.SetParent(canvas.transform, false);
-        var loadingScreen = loadingScreenGO.AddComponent<LoadingScreen>();
-        
-        // Configure the loading screen
-        ConfigureLoadingScreen(loadingScreen, totalSlots, localSlot);
-        
-        // Initial status
-        loadingScreen.RefreshStatus(1, totalSlots - 1); // Start with local player
-
-        MatchmakingResult mm = null;
-        
-        // CRITICAL FIX: Must yield return the IEnumerator, otherwise the coroutine never executes!
-        // The previous pattern of calling FindMatch without yield return caused matchmaking to never complete.
-        // This fix ensures the coroutine properly executes in WebGL builds.
-        yield return NetManager.Instance.FindMatch(totalSlots, localSlot, searchTimeout, result => 
         {
-            mm = result;
-            loadingScreen.ShowMatchFound(result.realPlayers, result.botCount);
-        });
+            EnsureCanvas();
+            EnsureNetManager();
+
+            GameState.Mode mode = GameState.Instance != null ? GameState.Instance.currentMode : GameState.Mode.FFA;
+            if (mode == GameState.Mode.NONE) mode = GameState.Mode.FFA;
+            bool isBvb = mode == GameState.Mode.BVB;
+
+            int totalSlots = isBvb ? 2 : 4;
+            int localSlot = GameState.Instance != null ? GameState.Instance.localPlayerIndex : 0;
+            localSlot = Mathf.Clamp(localSlot, 0, totalSlots - 1);
+
+            // Hide gameplay HUDs during the search.
+            if (ffaHudRoot != null) ffaHudRoot.SetActive(false);
+            if (bvbHudRoot != null) bvbHudRoot.SetActive(false);
+
+            // Build loading screen with player cards
+            var loadingScreenGO = new GameObject("LoadingScreen", typeof(RectTransform));
+            loadingScreenGO.transform.SetParent(canvas.transform, false);
+            var loadingScreen = loadingScreenGO.AddComponent<LoadingScreen>();
         
-        // Matchmaking result should now be in mm (callback was invoked)
-        // No need for manual polling loop - the coroutine completes when matchmaking finishes
+            // Configure the loading screen
+            ConfigureLoadingScreen(loadingScreen, totalSlots, localSlot);
         
-        if (mm == null)
-        {
-            loadingScreen.Show(totalSlots, new List<int> { localSlot }, 
-                Enumerable.Range(0, totalSlots).Where(i => i != localSlot).ToList(), localSlot);
-            mm = new MatchmakingResult { totalSlots = totalSlots, realPlayers = 1, botCount = totalSlots - 1, 
-                humanSlots = new List<int> { localSlot } };
+            // Initial status - show timeout message
+            loadingScreen.RefreshStatusWithTimeout(1, totalSlots - 1, "Searching for opponents..."); // Start with local player
+        
+            MatchmakingResult mm = null;
+        
+            // CRITICAL FIX: Must yield return the IEnumerator, otherwise the coroutine never executes!
+            // The previous pattern of calling FindMatch without yield return caused matchmaking to never complete.
+            // This fix ensures the coroutine properly executes in WebGL builds.
+            yield return NetManager.Instance.FindMatch(totalSlots, localSlot, searchTimeout, result => 
+            {
+                mm = result;
+                loadingScreen.ShowMatchFound(result.realPlayers, result.botCount);
+            });
+        
+            // Matchmaking result should now be in mm (callback was invoked)
+            // No need for manual polling loop - the coroutine completes when matchmaking finishes
+        
+            if (mm == null)
+            {
+                loadingScreen.Show(totalSlots, new List<int> { localSlot }, 
+                    Enumerable.Range(0, totalSlots).Where(i => i != localSlot).ToList(), localSlot);
+                mm = new MatchmakingResult { totalSlots = totalSlots, realPlayers = 1, botCount = totalSlots - 1, 
+                    humanSlots = new List<int> { localSlot } };
+            }
+
+            // If no real players found, inform user bots are being used
+            if (mm.realPlayers <= 1)
+            {
+                loadingScreen.ShowMatchFound(1, totalSlots - 1);
+            }
+
+            yield return new WaitForSeconds(1.2f);
+        
+            // Clean up loading screen
+            Object.Destroy(loadingScreenGO);
+
+            // Reveal the correct HUD and boot the mode with the resolved roster.
+            if (ffaHudRoot != null) ffaHudRoot.SetActive(!isBvb);
+            if (bvbHudRoot != null) bvbHudRoot.SetActive(isBvb);
+
+            int seed = System.Environment.TickCount;
+            if (isBvb) BootBrainVsBrain(seed, mm);
+            else BootFFA(seed, mm);
         }
-
-        yield return new WaitForSeconds(1.2f);
-        
-        // Clean up loading screen
-        Object.Destroy(loadingScreenGO);
-
-        // Reveal the correct HUD and boot the mode with the resolved roster.
-        if (ffaHudRoot != null) ffaHudRoot.SetActive(!isBvb);
-        if (bvbHudRoot != null) bvbHudRoot.SetActive(isBvb);
-
-        int seed = System.Environment.TickCount;
-        if (isBvb) BootBrainVsBrain(seed, mm);
-        else BootFFA(seed, mm);
-    }
 
     private void ConfigureLoadingScreen(LoadingScreen loadingScreen, int totalSlots, int localSlot)
     {

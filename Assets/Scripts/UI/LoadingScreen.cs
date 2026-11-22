@@ -176,6 +176,23 @@ public class LoadingScreen : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Refreshes status with a custom message during search (used for timeout indication)
+    /// </summary>
+    public void RefreshStatusWithTimeout(int realPlayerCount, int botCount, string message)
+    {
+        if (statusText != null)
+        {
+            statusText.text = message;
+            statusText.color = realPlayerCount > 0 ? Color.cyan : Color.yellow;
+        }
+
+        if (subText != null)
+        {
+            subText.text = $"{realPlayerCount} real{(realPlayerCount == 1 ? "" : "s")}  -  {botCount} AI bot{(botCount == 1 ? "" : "s")}";
+        }
+    }
+
     public void ShowMatchFound(int realPlayerCount, int botCount)
     {
         if (statusText != null)
