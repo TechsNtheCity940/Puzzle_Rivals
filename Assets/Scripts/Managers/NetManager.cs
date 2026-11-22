@@ -202,7 +202,8 @@ public class NetManager : MonoBehaviour
 
             // Use HTTP fallback with timeout - skip MP Center since packages may not be available
             Debug.Log("[Matchmaking] Attempting HTTP fallback matchmaking...");
-            yield return FindMatchViaHttpFallback(totalSlots, timeout, result, ref online, humans, localSlot);
+            yield return FindMatchViaHttpFallback(totalSlots, timeout, result, null, humans, localSlot);
+            online = result.online;
             
             // CRITICAL FIX: Ensure matchmaking is finalized even after HTTP failure
             if (!online && _matchmakingTimedOut)
@@ -243,7 +244,6 @@ public class NetManager : MonoBehaviour
         }
 
         // Finalize result
-        result.online = online;
         result.realPlayers = humans.Count;
         result.botCount = totalSlots - humans.Count;
         result.roomId = (online ? "ROOM_" : "LOCAL_") + UnityEngine.Random.Range(1000, 9999);
@@ -273,10 +273,12 @@ public class NetManager : MonoBehaviour
 
     /// <summary>
     /// Legacy HTTP-based matchmaking fallback with timeout
+    /// Returns online status through closure to avoid ref/out in iterator
     /// </summary>
     private IEnumerator FindMatchViaHttpFallback(int totalSlots, float timeout, MatchmakingResult result, 
-        ref bool online, List<int> humans, int localSlot)
+        Action<bool> setOnlineCallback, List<int> humans, int localSlot)
     {
+        bool online = false;
         string serverUrl = string.IsNullOrEmpty(supabaseUrl) ? "https://mp.tesana.ai" : supabaseUrl;
         
         float startTime = Time.time;
@@ -324,6 +326,7 @@ public class NetManager : MonoBehaviour
                 if (validResponse)
                 {
                     online = true;
+                    setOnlineCallback?.Invoke(online);
                     TryParseRemoteHumans(responseText, result.totalSlots, localSlot, humans);
                     Debug.Log("[Matchmaking] Backend reachable. Real players found: " + humans.Count);
                 }
@@ -362,6 +365,9 @@ public class NetManager : MonoBehaviour
         }
         
         Debug.Log("[Matchmaking] HTTP fallback completed, online=" + online + ", mpCenterFailed=" + _mpCenterFailed);
+        
+        // Store the online status in the result for the caller to read
+        result.online = online;
     }
 
     /// <summary>

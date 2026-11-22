@@ -136,7 +136,7 @@ public class PlayerCard : MonoBehaviour
         }
 
         // Apply banner if provided
-        if (banner != null && loadout != null)
+        if (banner != null && loadout.banner != null)
         {
             SetSprite(banner, loadout.banner);
         }

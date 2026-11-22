@@ -23,7 +23,7 @@ public class PlayerCardTestSpawner : MonoBehaviour
     public void CreateTestCard()
     {
         // Clear existing test cards
-        var existing = FindObjectsByType<PlayerCard>(FindObjectsSortInstance.None);
+        var existing = FindObjectsByType<PlayerCard>(FindObjectsInactive.None);
         foreach (var card in existing)
         {
             if (card.name.Contains("TestCard"))
@@ -33,7 +33,7 @@ public class PlayerCardTestSpawner : MonoBehaviour
         // Create test card
         var cardGO = Instantiate(cardPrefab, targetCanvas.transform);
         cardGO.name = "TestCard";
-        var card = cardGO.GetComponent<PlayerCard>();
+        var playerCard = cardGO.GetComponent<PlayerCard>();
         
         // Create test loadout
         var lib = CosmeticLibrary.Instance;
@@ -54,7 +54,7 @@ public class PlayerCardTestSpawner : MonoBehaviour
         player.puzzlesSolved = 42;
         
         // Bind and display
-        card.Bind(player, loadout);
+        playerCard.Bind(player, loadout);
         
         Debug.Log("✅ Test PlayerCard created with all cosmetics:");
         Debug.Log("   - Avatar: " + (loadout.avatar != null));
