@@ -4,6 +4,11 @@ using System.Linq;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
+using UnityEditor.Build;
+using UnityEditor.Build.Reporting;
+#if UNITY_6000_OR_NEWER
+using UnityEngine.Build;
+#endif
 
 public static class PuzzleRivalsWebGLDeployBuild
 {
@@ -20,9 +25,9 @@ public static class PuzzleRivalsWebGLDeployBuild
         if (scenes.Length == 0)
             throw new Exception("No enabled scenes found in EditorBuildSettings.");
 
-        // Set compression to None for GitHub Pages compatibility
-        PlayerSettings.WebGL.compressionFormat = CompressionFormat.None;
-        PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.FullLogger;
+        // Set compression to Uncompressed for GitHub Pages compatibility
+        PlayerSettings.WebGL.compressionFormat = CompressionFormat.Uncompressed;
+        PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.Standard;
         
         Debug.Log("PR_WEBGL_BUILD_START scenes=" + scenes.Length + " output=" + output);
         Debug.Log("PR_WEBGL_BUILD_UNITY=" + Application.unityVersion);
