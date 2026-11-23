@@ -23,6 +23,12 @@ public class MainMenuController : MonoBehaviour
     public Button btnStore;
     public Button btnSeasonPass;
 
+    [Header("Practice Mode Panel")]
+    public CanvasGroup practiceModeRoot;
+    public Button practiceFFAButton;
+    public Button practiceBVBButton;
+    public Button backToMainMenuButton;
+
     [Header("Audio")]
     public AudioClip clickSfx;
     public AudioClip hoverSfx;
@@ -36,13 +42,21 @@ public class MainMenuController : MonoBehaviour
         if (explosionImage != null)
         {
             explosionImage.gameObject.SetActive(false);
-            explosionImage.transform.localScale = Vector3.zero;
+            explosionImage.transform.localScale = Vector3.one * 0.1f;
         }
         if (mainMenuRoot != null)
         {
             mainMenuRoot.alpha = 0f;
             mainMenuRoot.interactable = false;
             mainMenuRoot.blocksRaycasts = false;
+        }
+
+        // Initialize practice mode panel hidden
+        if (practiceModeRoot != null)
+        {
+            practiceModeRoot.alpha = 0f;
+            practiceModeRoot.interactable = false;
+            practiceModeRoot.blocksRaycasts = false;
         }
 
         // Setup triggers
@@ -53,11 +67,16 @@ public class MainMenuController : MonoBehaviour
 
         // Setup main menu buttons
         SetupButton(btnPlay, PlayGame);
-        SetupButton(btnPractice, OpenPracticeMode);
+        SetupButton(btnPractice, ShowPracticeModeSelection);
         SetupButton(btnQuit, QuitGame);
         SetupButton(btnProfile, () => GoToScene("Profile"));
         SetupButton(btnStore, () => GoToScene("Store"));
         SetupButton(btnSeasonPass, () => GoToScene("SeasonPass"));
+
+        // Setup practice mode buttons
+        SetupButton(practiceFFAButton, () => StartPracticeMatch(GameState.Mode.FFA));
+        SetupButton(practiceBVBButton, () => StartPracticeMatch(GameState.Mode.BVB));
+        SetupButton(backToMainMenuButton, HidePracticeModeSelection);
 
         // Play menu music
         if (AudioManager.Instance != null)
@@ -185,13 +204,63 @@ public class MainMenuController : MonoBehaviour
         }
     }
 
-    private void OpenPracticeMode()
+    private void ShowPracticeModeSelection()
     {
-        // Set the flag to indicate we're opening from practice button
-        ModeSelectController.openingFromPracticeModeButton = true;
+        Debug.Log("Showing practice mode selection.");
         
-        Debug.Log("Opening mode select for practice.");
-        UnityEngine.SceneManagement.SceneManager.LoadScene("ModeSelect");
+        if (mainMenuRoot != null)
+        {
+            mainMenuRoot.alpha = 0f;
+            mainMenuRoot.interactable = false;
+            mainMenuRoot.blocksRaycasts = false;
+        }
+        
+        if (practiceModeRoot != null)
+        {
+            practiceModeRoot.alpha = 1f;
+            practiceModeRoot.interactable = true;
+            practiceModeRoot.blocksRaycasts = true;
+        }
+        
+        PlayClickSound();
+    }
+
+    private void HidePracticeModeSelection()
+    {
+        if (practiceModeRoot != null)
+        {
+            practiceModeRoot.alpha = 0f;
+            practiceModeRoot.interactable = false;
+            practiceModeRoot.blocksRaycasts = false;
+        }
+        
+        if (mainMenuRoot != null)
+        {
+            mainMenuRoot.alpha = 1f;
+            mainMenuRoot.interactable = true;
+            mainMenuRoot.blocksRaycasts = true;
+        }
+        
+        PlayClickSound();
+    }
+
+    private void StartPracticeMatch(GameState.Mode mode)
+    {
+        if (GameState.Instance != null)
+        {
+            Debug.Log($"Starting practice match with mode: {mode}");
+            GameState.Instance.currentMode = mode;
+            GameState.Instance.isPracticeMode = true;
+        }
+
+        // Enable bot players by setting this flag in NetManager
+        if (NetManager.Instance != null)
+        {
+            NetManager.Instance.quickMatchNoLivePlayers = true;
+        }
+
+        // Load the match scene directly - will populate with bots
+        UnityEngine.SceneManagement.SceneManager.LoadScene("Match");
     }
 
     private void QuitGame()

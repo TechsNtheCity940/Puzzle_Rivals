@@ -15,16 +15,9 @@ public class ModeSelectController : MonoBehaviour
     public CanvasGroup modeMenuRoot;
     public Button ffaButton;
     public Button brainVsBrainButton;
-    public Button practiceButton;
     public Button profileButton;
     public Button storeButton;
     public Button quitButton;
-
-    [Header("Practice Mode Panel")]
-    public CanvasGroup practiceModeRoot;
-    public Button practiceFFAButton;
-    public Button practiceBVBButton;
-    public Button backToModeMenuButton;
 
     [Header("Validation Popup Dialog")]
     public GameObject validationPopupRoot;
@@ -42,17 +35,10 @@ public class ModeSelectController : MonoBehaviour
     public string profileSceneName = "Profile";
     public string storeSceneName = "Store";
 
-    // Static flag to track if we're opening from practice mode button on main menu
-    public static bool openingFromPracticeModeButton = false;
-
     private bool isLoading = true;
 
     private void Start()
     {
-        // Capture the practice mode flag before any other initialization
-        bool skipToPractice = openingFromPracticeModeButton;
-        openingFromPracticeModeButton = false; // Reset for next time
-
         // Set initial UI states
         if (loadingScreenRoot != null) loadingScreenRoot.SetActive(true);
         if (loadingProgressBar != null) loadingProgressBar.value = 0f;
@@ -72,15 +58,9 @@ public class ModeSelectController : MonoBehaviour
         // Setup Button Listeners
         SetupButton(ffaButton, () => TryStartMatch(GameState.Mode.FFA));
         SetupButton(brainVsBrainButton, () => TryStartMatch(GameState.Mode.BVB));
-        SetupButton(practiceButton, () => ShowPracticeModeMenu());
         SetupButton(profileButton, () => LoadScene(profileSceneName));
         SetupButton(storeButton, () => LoadScene(storeSceneName));
         SetupButton(quitButton, BackToMenu);
-
-        // Setup Practice Mode Listeners
-        SetupButton(practiceFFAButton, () => StartPracticeMatch(GameState.Mode.FFA));
-        SetupButton(practiceBVBButton, () => StartPracticeMatch(GameState.Mode.BVB));
-        SetupButton(backToModeMenuButton, () => ShowModeMenu());
 
         // Setup Popup Listeners
         if (popupGoToProfileButton != null)
@@ -107,7 +87,7 @@ public class ModeSelectController : MonoBehaviour
         }
 
         // Start loading sequence
-        StartCoroutine(LoadingSequenceRoutine(skipToPractice));
+        StartCoroutine(LoadingSequenceRoutine());
     }
 
     private void SetupButton(Button button, UnityEngine.Events.UnityAction callback)
@@ -132,7 +112,7 @@ public class ModeSelectController : MonoBehaviour
         trigger.triggers.Add(entry);
     }
 
-    private IEnumerator LoadingSequenceRoutine(bool skipToPractice = false)
+    private IEnumerator LoadingSequenceRoutine()
     {
         isLoading = true;
         float elapsed = 0f;
@@ -152,14 +132,6 @@ public class ModeSelectController : MonoBehaviour
         if (loadingScreenRoot != null)
         {
             loadingScreenRoot.SetActive(false);
-        }
-
-        // Check if we should skip to practice mode (from Main menu practice button)
-        if (skipToPractice)
-        {
-            OpenPracticeModeDirectly();
-            isLoading = false;
-            yield break;
         }
 
         // Fade in menu
@@ -183,32 +155,7 @@ public class ModeSelectController : MonoBehaviour
             modeMenuRoot.blocksRaycasts = true;
         }
 
-        // Initialize Practice Mode UI
-        if (practiceModeRoot != null)
-        {
-            practiceModeRoot.alpha = 0f;
-            practiceModeRoot.interactable = false;
-            practiceModeRoot.blocksRaycasts = false;
-        }
-
         isLoading = false;
-    }
-
-    private void OpenPracticeModeDirectly()
-    {
-        if (modeMenuRoot != null)
-        {
-            modeMenuRoot.alpha = 0f;
-            modeMenuRoot.interactable = false;
-            modeMenuRoot.blocksRaycasts = false;
-        }
-        if (practiceModeRoot != null)
-        {
-            practiceModeRoot.alpha = 1f;
-            practiceModeRoot.interactable = true;
-            practiceModeRoot.blocksRaycasts = true;
-        }
-        PlayClickSound();
     }
 
     private void TryStartMatch(GameState.Mode mode)
@@ -236,60 +183,6 @@ public class ModeSelectController : MonoBehaviour
         if (GameState.Instance != null)
         {
             GameState.Instance.currentMode = mode;
-        }
-
-        LoadScene(matchSceneName);
-    }
-
-    private void ShowPracticeModeMenu()
-    {
-        if (modeMenuRoot != null)
-        {
-            modeMenuRoot.alpha = 0f;
-            modeMenuRoot.interactable = false;
-            modeMenuRoot.blocksRaycasts = false;
-        }
-        if (practiceModeRoot != null)
-        {
-            practiceModeRoot.alpha = 1f;
-            practiceModeRoot.interactable = true;
-            practiceModeRoot.blocksRaycasts = true;
-        }
-        PlayClickSound();
-    }
-
-    private void ShowModeMenu()
-    {
-        if (practiceModeRoot != null)
-        {
-            practiceModeRoot.alpha = 0f;
-            practiceModeRoot.interactable = false;
-            practiceModeRoot.blocksRaycasts = false;
-        }
-        if (modeMenuRoot != null)
-        {
-            modeMenuRoot.alpha = 1f;
-            modeMenuRoot.interactable = true;
-            modeMenuRoot.blocksRaycasts = true;
-        }
-        PlayClickSound();
-    }
-
-    private void StartPracticeMatch(GameState.Mode mode)
-    {
-        if (isLoading) return;
-
-        // Set practice mode flag
-        if (GameState.Instance != null)
-        {
-            GameState.Instance.currentMode = mode;
-            GameState.Instance.isPracticeMode = true;
-        }
-
-        // Enable bot players by setting this flag in NetManager
-        if (NetManager.Instance != null)
-        {
-            NetManager.Instance.quickMatchNoLivePlayers = true;
         }
 
         LoadScene(matchSceneName);
