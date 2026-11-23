@@ -17,6 +17,7 @@ public class MainMenuController : MonoBehaviour
     [Header("Main Menu View")]
     public CanvasGroup mainMenuRoot;
     public Button btnPlay;
+    public Button btnPractice;
     public Button btnQuit;
     public Button btnProfile;
     public Button btnStore;
@@ -52,6 +53,7 @@ public class MainMenuController : MonoBehaviour
 
         // Setup main menu buttons
         SetupButton(btnPlay, PlayGame);
+        SetupButton(btnPractice, OpenPracticeMode);
         SetupButton(btnQuit, QuitGame);
         SetupButton(btnProfile, () => GoToScene("Profile"));
         SetupButton(btnStore, () => GoToScene("Store"));
@@ -181,6 +183,15 @@ public class MainMenuController : MonoBehaviour
             Debug.Log("Opening mode select.");
             UnityEngine.SceneManagement.SceneManager.LoadScene("ModeSelect");
         }
+    }
+
+    private void OpenPracticeMode()
+    {
+        // Set the flag to indicate we're opening from practice button
+        ModeSelectController.openingFromPracticeModeButton = true;
+        
+        Debug.Log("Opening mode select for practice.");
+        UnityEngine.SceneManagement.SceneManager.LoadScene("ModeSelect");
     }
 
     private void QuitGame()

@@ -42,10 +42,17 @@ public class ModeSelectController : MonoBehaviour
     public string profileSceneName = "Profile";
     public string storeSceneName = "Store";
 
+    // Static flag to track if we're opening from practice mode button on main menu
+    public static bool openingFromPracticeModeButton = false;
+
     private bool isLoading = true;
 
     private void Start()
     {
+        // Capture the practice mode flag before any other initialization
+        bool skipToPractice = openingFromPracticeModeButton;
+        openingFromPracticeModeButton = false; // Reset for next time
+
         // Set initial UI states
         if (loadingScreenRoot != null) loadingScreenRoot.SetActive(true);
         if (loadingProgressBar != null) loadingProgressBar.value = 0f;
@@ -100,7 +107,7 @@ public class ModeSelectController : MonoBehaviour
         }
 
         // Start loading sequence
-        StartCoroutine(LoadingSequenceRoutine());
+        StartCoroutine(LoadingSequenceRoutine(skipToPractice));
     }
 
     private void SetupButton(Button button, UnityEngine.Events.UnityAction callback)
@@ -125,7 +132,7 @@ public class ModeSelectController : MonoBehaviour
         trigger.triggers.Add(entry);
     }
 
-    private IEnumerator LoadingSequenceRoutine()
+    private IEnumerator LoadingSequenceRoutine(bool skipToPractice = false)
     {
         isLoading = true;
         float elapsed = 0f;
@@ -145,6 +152,14 @@ public class ModeSelectController : MonoBehaviour
         if (loadingScreenRoot != null)
         {
             loadingScreenRoot.SetActive(false);
+        }
+
+        // Check if we should skip to practice mode (from Main menu practice button)
+        if (skipToPractice)
+        {
+            OpenPracticeModeDirectly();
+            isLoading = false;
+            yield break;
         }
 
         // Fade in menu
@@ -177,6 +192,23 @@ public class ModeSelectController : MonoBehaviour
         }
 
         isLoading = false;
+    }
+
+    private void OpenPracticeModeDirectly()
+    {
+        if (modeMenuRoot != null)
+        {
+            modeMenuRoot.alpha = 0f;
+            modeMenuRoot.interactable = false;
+            modeMenuRoot.blocksRaycasts = false;
+        }
+        if (practiceModeRoot != null)
+        {
+            practiceModeRoot.alpha = 1f;
+            practiceModeRoot.interactable = true;
+            practiceModeRoot.blocksRaycasts = true;
+        }
+        PlayClickSound();
     }
 
     private void TryStartMatch(GameState.Mode mode)
