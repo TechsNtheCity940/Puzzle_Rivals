@@ -33,6 +33,7 @@ public class MatchBootstrap : MonoBehaviour
 
     // Every match first searches for real players via NetManager, then fills any
     // unfilled lobby slots with AI bots before booting the mode.
+    // PRACTICE MODE: If isPracticeMode is true, skip matchmaking and directly create bot-filled result.
     private IEnumerator Start()
         {
             EnsureCanvas();
@@ -40,6 +41,7 @@ public class MatchBootstrap : MonoBehaviour
 
             GameState.Mode mode = GameState.Instance != null ? GameState.Instance.currentMode : GameState.Mode.FFA;
             if (mode == GameState.Mode.NONE) mode = GameState.Mode.FFA;
+            bool isPracticeMode = GameState.Instance != null && GameState.Instance.isPracticeMode;
             bool isBvb = mode == GameState.Mode.BVB;
 
             int totalSlots = isBvb ? 2 : 4;
@@ -62,31 +64,66 @@ public class MatchBootstrap : MonoBehaviour
             loadingScreen.RefreshStatusWithTimeout(1, totalSlots - 1, "Searching for opponents..."); // Start with local player
         
             MatchmakingResult mm = null;
-        
-            // CRITICAL FIX: Must yield return the IEnumerator, otherwise the coroutine never executes!
-            // The previous pattern of calling FindMatch without yield return caused matchmaking to never complete.
-            // This fix ensures the coroutine properly executes in WebGL builds.
-            yield return NetManager.Instance.FindMatch(totalSlots, localSlot, searchTimeout, result => 
-            {
-                mm = result;
-                loadingScreen.ShowMatchFound(result.realPlayers, result.botCount);
-            });
-        
-            // Matchmaking result should now be in mm (callback was invoked)
-            // No need for manual polling loop - the coroutine completes when matchmaking finishes
-        
-            if (mm == null)
-            {
-                loadingScreen.Show(totalSlots, new List<int> { localSlot }, 
-                    Enumerable.Range(0, totalSlots).Where(i => i != localSlot).ToList(), localSlot);
-                mm = new MatchmakingResult { totalSlots = totalSlots, realPlayers = 1, botCount = totalSlots - 1, 
-                    humanSlots = new List<int> { localSlot } };
-            }
 
-            // If no real players found, inform user bots are being used
-            if (mm.realPlayers <= 1)
+            // PRACTICE MODE: Skip live matchmaking and use pre-created bot-filled result
+            if (isPracticeMode)
             {
-                loadingScreen.ShowMatchFound(1, totalSlots - 1);
+                Debug.Log("[MatchBootstrap] Practice mode: skipping live matchmaking, using bots only");
+                mm = CreateBotFilledResult(totalSlots, localSlot);
+                loadingScreen.ShowMatchFound(mm.realPlayers, mm.botCount);
+                loadingScreen.ShowFromMatchmakingResult(mm, localSlot);
+            }
+            else
+            {
+                // CRITICAL FIX: Must yield return the IEnumerator, otherwise the coroutine never executes!
+                // The previous pattern of calling FindMatch without yield return caused matchmaking to never complete.
+                // This fix ensures the coroutine properly executes in WebGL builds.
+                yield return NetManager.Instance.FindMatch(totalSlots, localSlot, searchTimeout, result => 
+                {
+                    mm = result;
+                    loadingScreen.ShowMatchFound(result.realPlayers, result.botCount);
+                });
+            
+                // Matchmaking result should now be in mm (callback was invoked)
+                // No need for manual polling loop - the coroutine completes when matchmaking finishes
+            
+                if (mm == null)
+                {
+                    // Fallback: Create bot-filled result with proper player info
+                    // This should not happen if FindMatch callback was invoked correctly
+                    mm = new MatchmakingResult { totalSlots = totalSlots, realPlayers = 1, botCount = totalSlots - 1,
+                        humanSlots = new List<int> { localSlot } };
+                    mm.players = new List<PlayerInfo>();
+                    for (int i = 0; i < totalSlots; i++)
+                    {
+                        bool isHuman = i == localSlot;
+                        string tag = isHuman ? "YOU" : "";
+                        mm.players.Add(new PlayerInfo(i, isHuman, tag, isHuman));
+                        mm.playerNames.Add(tag);
+                    }
+                    // Generate bot puzzle tags for non-local slots
+                    if (totalSlots > 1)
+                    {
+                        var loading = loadingScreen;
+                        for (int slot = 0; slot < totalSlots; slot++)
+                        {
+                            if (slot != localSlot)
+                            {
+                                string botTag = loading != null ? loading.GenerateBotPuzzleTag(slot) : $"Bot-{slot}";
+                                mm.playerNames[slot] = botTag;
+                                if (slot < mm.players.Count)
+                                    mm.players[slot].puzzleTag = botTag;
+                            }
+                        }
+                    }
+                    loadingScreen.ShowFromMatchmakingResult(mm, localSlot);
+                }
+
+                // If no real players found, inform user bots are being used
+                if (mm.realPlayers <= 1)
+                {
+                    loadingScreen.ShowMatchFound(1, totalSlots - 1);
+                }
             }
 
             yield return new WaitForSeconds(1.2f);
@@ -248,5 +285,45 @@ public class MatchBootstrap : MonoBehaviour
         }
         if (FindAnyObjectByType<EventSystem>() == null)
             new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+    }
+
+    // ---- Practice Mode Helpers ----
+
+    /// <summary>
+    /// Creates a bot-filled matchmaking result for practice mode.
+    /// This skips live matchmaking and fills all non-local slots with AI bots.
+    /// </summary>
+    private MatchmakingResult CreateBotFilledResult(int totalSlots, int localSlot)
+    {
+        var result = new MatchmakingResult { totalSlots = totalSlots };
+        result.humanSlots = new List<int> { localSlot };
+        result.online = false;
+        result.realPlayers = 1;
+        result.botCount = totalSlots - 1;
+        result.roomId = "PRACTICE_" + UnityEngine.Random.Range(1000, 9999);
+
+        result.players = new List<PlayerInfo>();
+        result.playerNames = new List<string>();
+
+        // Generate player info for each slot
+        string[] botNames = { "ALPHA", "BETA", "GAMMA", "DELTA", "EPSILON", "ZETA", "ETA", "THETA" };
+
+        for (int i = 0; i < totalSlots; i++)
+        {
+            bool isHuman = i == localSlot;
+            bool isLocal = i == localSlot;
+            string tag = isHuman ? "YOU" : (i < botNames.Length ? botNames[i] : "BOT" + i);
+            var playerInfo = new PlayerInfo(i, isHuman, tag, isLocal);
+            result.players.Add(playerInfo);
+            result.playerNames.Add(tag);
+
+            if (!isHuman)
+            {
+                result.aiSlots.Add(i);
+            }
+        }
+
+        Debug.Log($"[MatchBootstrap] CreateBotFilledResult: {result.realPlayers} real players, {result.botCount} bots, roomId={result.roomId}");
+        return result;
     }
 }

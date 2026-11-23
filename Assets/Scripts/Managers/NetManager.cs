@@ -307,7 +307,27 @@ public class NetManager : MonoBehaviour
         {
             Debug.Log("[Matchmaking] Sending HTTP request to " + serverUrl + "/matchmake?slots=" + totalSlots);
             
-            yield return req.SendWebRequest();
+            // CRITICAL FIX FOR WEBGL: Add timeout loop to prevent hanging
+            // UnityWebRequest can hang indefinitely in WebGL builds
+            float requestStartTime = Time.time;
+            bool requestCompleted = false;
+            
+            while (!requestCompleted && (Time.time - requestStartTime) < effectiveTimeout)
+            {
+                var operation = req.SendWebRequest();
+                while (!operation.isDone && (Time.time - requestStartTime) < effectiveTimeout)
+                {
+                    yield return null;
+                }
+                requestCompleted = true;
+            }
+            
+            if (!requestCompleted)
+            {
+                Debug.Log("[Matchmaking] HTTP request did not complete within timeout, forcing bot fill");
+                _matchmakingTimedOut = true;
+                if (req != null) req.Abort();
+            }
 
             bool requestFailed = false;
             

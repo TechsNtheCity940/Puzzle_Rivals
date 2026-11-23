@@ -49,6 +49,8 @@ public class GameState : MonoBehaviour
     [Header("Current Session")]
     public Mode currentMode = Mode.NONE;
     public int localPlayerIndex = 0;
+    [Header("Practice Mode")]
+    public bool isPracticeMode = false;
 
     private void Awake()
     {
@@ -67,5 +69,6 @@ public class GameState : MonoBehaviour
     {
         currentMode = Mode.NONE;
         localPlayerIndex = 0;
+        isPracticeMode = false;
     }
 }

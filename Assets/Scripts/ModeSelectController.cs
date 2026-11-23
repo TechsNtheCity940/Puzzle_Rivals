@@ -15,9 +15,16 @@ public class ModeSelectController : MonoBehaviour
     public CanvasGroup modeMenuRoot;
     public Button ffaButton;
     public Button brainVsBrainButton;
+    public Button practiceButton;
     public Button profileButton;
     public Button storeButton;
     public Button quitButton;
+
+    [Header("Practice Mode Panel")]
+    public CanvasGroup practiceModeRoot;
+    public Button practiceFFAButton;
+    public Button practiceBVBButton;
+    public Button backToModeMenuButton;
 
     [Header("Validation Popup Dialog")]
     public GameObject validationPopupRoot;
@@ -58,9 +65,15 @@ public class ModeSelectController : MonoBehaviour
         // Setup Button Listeners
         SetupButton(ffaButton, () => TryStartMatch(GameState.Mode.FFA));
         SetupButton(brainVsBrainButton, () => TryStartMatch(GameState.Mode.BVB));
+        SetupButton(practiceButton, () => ShowPracticeModeMenu());
         SetupButton(profileButton, () => LoadScene(profileSceneName));
         SetupButton(storeButton, () => LoadScene(storeSceneName));
         SetupButton(quitButton, BackToMenu);
+
+        // Setup Practice Mode Listeners
+        SetupButton(practiceFFAButton, () => StartPracticeMatch(GameState.Mode.FFA));
+        SetupButton(practiceBVBButton, () => StartPracticeMatch(GameState.Mode.BVB));
+        SetupButton(backToModeMenuButton, () => ShowModeMenu());
 
         // Setup Popup Listeners
         if (popupGoToProfileButton != null)
@@ -155,6 +168,14 @@ public class ModeSelectController : MonoBehaviour
             modeMenuRoot.blocksRaycasts = true;
         }
 
+        // Initialize Practice Mode UI
+        if (practiceModeRoot != null)
+        {
+            practiceModeRoot.alpha = 0f;
+            practiceModeRoot.interactable = false;
+            practiceModeRoot.blocksRaycasts = false;
+        }
+
         isLoading = false;
     }
 
@@ -183,6 +204,60 @@ public class ModeSelectController : MonoBehaviour
         if (GameState.Instance != null)
         {
             GameState.Instance.currentMode = mode;
+        }
+
+        LoadScene(matchSceneName);
+    }
+
+    private void ShowPracticeModeMenu()
+    {
+        if (modeMenuRoot != null)
+        {
+            modeMenuRoot.alpha = 0f;
+            modeMenuRoot.interactable = false;
+            modeMenuRoot.blocksRaycasts = false;
+        }
+        if (practiceModeRoot != null)
+        {
+            practiceModeRoot.alpha = 1f;
+            practiceModeRoot.interactable = true;
+            practiceModeRoot.blocksRaycasts = true;
+        }
+        PlayClickSound();
+    }
+
+    private void ShowModeMenu()
+    {
+        if (practiceModeRoot != null)
+        {
+            practiceModeRoot.alpha = 0f;
+            practiceModeRoot.interactable = false;
+            practiceModeRoot.blocksRaycasts = false;
+        }
+        if (modeMenuRoot != null)
+        {
+            modeMenuRoot.alpha = 1f;
+            modeMenuRoot.interactable = true;
+            modeMenuRoot.blocksRaycasts = true;
+        }
+        PlayClickSound();
+    }
+
+    private void StartPracticeMatch(GameState.Mode mode)
+    {
+        if (isLoading) return;
+
+        // Set practice mode flag
+        if (GameState.Instance != null)
+        {
+            GameState.Instance.currentMode = mode;
+            GameState.Instance.isPracticeMode = true;
+        }
+
+        // Enable bot players by setting this flag in NetManager
+        if (NetManager.Instance != null)
+        {
+            NetManager.Instance.quickMatchNoLivePlayers = true;
         }
 
         LoadScene(matchSceneName);
